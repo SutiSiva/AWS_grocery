@@ -4,50 +4,72 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
   }
 }
+
 
 provider "aws" {
   region = "eu-central-1"
 }
 
-
-
-# --- Deine bestehende VPC ---
+# -------------------------------
+# VPC
+# -------------------------------
 resource "aws_vpc" "sutivpc" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
 
-  tags = {
-    Name = "terraformsutivpc"
-  }
+  tags = { Name = "terraformsutivpc" }
 }
 
-# --- Öffentliche Subnetze ---
+# -------------------------------
+# Public Subnet
+# -------------------------------
 resource "aws_subnet" "public_subnet" {
   vpc_id                  = aws_vpc.sutivpc.id
   cidr_block              = "10.0.1.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "eu-central-1a"
 
-  tags = {
-    Name = "public-subnet"
-  }
+  tags = { Name = "public-subnet" }
 }
 
-# --- Internet Gateway ---
+# -------------------------------
+# Private Subnets (RDS)
+# -------------------------------
+resource "aws_subnet" "private_subnet_1" {
+  vpc_id                  = aws_vpc.sutivpc.id
+  cidr_block              = "10.0.2.0/24"
+  map_public_ip_on_launch = false
+  availability_zone       = "eu-central-1b"
+
+  tags = { Name = "private-subnet-1" }
+}
+
+resource "aws_subnet" "private_subnet_2" {
+  vpc_id                  = aws_vpc.sutivpc.id
+  cidr_block              = "10.0.3.0/24"
+  map_public_ip_on_launch = false
+  availability_zone       = "eu-central-1c"
+
+  tags = { Name = "private-subnet-2" }
+}
+
+# -------------------------------
+# Internet Gateway
+# -------------------------------
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.sutivpc.id
 
-  tags = {
-    Name = "terraform-igw"
-  }
+  tags = { Name = "terraform-igw" }
 }
 
-# --- Route Table ---
+# -------------------------------
+# Public Route Table
+# -------------------------------
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.sutivpc.id
 
@@ -56,18 +78,17 @@ resource "aws_route_table" "public_rt" {
     gateway_id = aws_internet_gateway.igw.id
   }
 
-  tags = {
-    Name = "public-rt"
-  }
+  tags = { Name = "public-rt" }
 }
 
-# --- Route Table Association ---
 resource "aws_route_table_association" "public_assoc" {
   subnet_id      = aws_subnet.public_subnet.id
   route_table_id = aws_route_table.public_rt.id
 }
 
-# --- Security Groups ---
+# -------------------------------
+# EC2 Security Group
+# -------------------------------
 resource "aws_security_group" "ec2_sg" {
   name   = "grocerymate-ec2-sg"
   vpc_id = aws_vpc.sutivpc.id
@@ -93,27 +114,27 @@ resource "aws_security_group" "ec2_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "grocerymate-ec2-sg"
-  }
+  tags = { Name = "grocerymate-ec2-sg" }
 }
 
-# --- EC2 Instance ---
+# -------------------------------
+# EC2 Instance (IAM Instance Profile kommt aus s3.tf!)
+# -------------------------------
 resource "aws_instance" "app" {
-  ami                         = "ami-06ee6255945a96aba" # Amazon Linux 2023
+  ami                         = "ami-06ee6255945a96aba"
   instance_type               = "t3.micro"
   subnet_id                   = aws_subnet.public_subnet.id
   vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
   associate_public_ip_address = true
+  key_name                    = "suti-ec2-key"
+  iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name  # kommt aus s3.tf
 
-  tags = {
-    Name = "grocerymate-ec2"
-  }
+  tags = { Name = "grocerymate-ec2" }
 }
 
-# --- Output ---
+# -------------------------------
+# Output
+# -------------------------------
 output "ec2_public_ip" {
-  description = "Public IP of EC2 instance"
-  value       = aws_instance.app.public_ip
+  value = aws_instance.app.public_ip
 }
-
