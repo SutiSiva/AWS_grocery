@@ -3,3 +3,8 @@
 *.tfstate.backup
 .terraform.lock.hcl
 backend/local.db
+*.tfstate
+*.tfstate.backup
+.DS_Store
+tfplan
+
